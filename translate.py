@@ -1,16 +1,18 @@
+import json
 import os
+
 import boto3
 from botocore.config import Config
-import json
 from dotenv import load_dotenv
 
 load_dotenv()
 
-with open('PromptGuide.md') as f:
+with open("PromptGuide.md") as f:
     PromptGuide = f.read()
-region_name=os.getenv('REGION_NAME')
+region_name = os.getenv("REGION_NAME")
 
-class GuideBased():
+
+class GuideBased:
     def __init__(self):
         session = boto3.Session()
         retry_config = Config(
@@ -20,21 +22,21 @@ class GuideBased():
                 "mode": "standard",
             },
         )
-        service_name='bedrock-runtime'
+        service_name = "bedrock-runtime"
         self.bedrock_client = session.client(
-            service_name=service_name,
-            config=retry_config)
-        
+            service_name=service_name, config=retry_config
+        )
+
     def __call__(self, initial_prompt):
         lang = self.detect_lang(initial_prompt)
-        if 'ch' in lang:
-            lang_prompt = 'Please use Chinese for rewriting. The xml tag name is still in English.'
-        elif 'en' in lang:
-            lang_prompt = 'Please use English for rewriting.'
+        if "ch" in lang:
+            lang_prompt = "Please use Chinese for rewriting. The xml tag name is still in English."
+        elif "en" in lang:
+            lang_prompt = "Please use English for rewriting."
         else:
-            lang_prompt = 'Please use same language as the initial instruction for rewriting. The xml tag name is still in English.'
-        
-        prompt = '''
+            lang_prompt = "Please use same language as the initial instruction for rewriting. The xml tag name is still in English."
+
+        prompt = """
 You are a instruction engineer. Your task is to rewrite the initial instruction in <initial_instruction></initial_instruction> xml tag based on the suggestions in the instruction guide in <instruction_guide></instruction_guide> xml tag.
 
 <instruction_guide>
@@ -99,47 +101,47 @@ If the question cannot be answered by the document, say "Cannot answer the quest
 <initial_instruction>
 {initial}
 </initial_instruction>
-'''.strip()
-        
+""".strip()
+
         messages = [
-          {
-            "role": "user",
-            "content": prompt.format(guide=PromptGuide, initial=initial_prompt, lang_prompt=lang_prompt)
-          },{
-            "role": "assistant",
-            "content": "<rerwited>"
-          }
+            {
+                "role": "user",
+                "content": prompt.format(
+                    guide=PromptGuide, initial=initial_prompt, lang_prompt=lang_prompt
+                ),
+            },
+            {"role": "assistant", "content": "<rerwited>"},
         ]
-        body = json.dumps({
-            "messages": messages,
-            "max_tokens": 4096,
-            "temperature": 0.8,
-            "top_k": 50,
-            "top_p": 1,
-            "stop_sequences": [
-              "</rerwited>"
-            ],
-            "anthropic_version": "bedrock-2023-05-31"
-        })
+        body = json.dumps(
+            {
+                "messages": messages,
+                "max_tokens": 4096,
+                "temperature": 0.8,
+                "top_k": 50,
+                "top_p": 1,
+                "stop_sequences": ["</rerwited>"],
+                "anthropic_version": "bedrock-2023-05-31",
+            }
+        )
         modelId = "anthropic.claude-3-sonnet-20240229-v1:0"  # anthropic.claude-3-sonnet-20240229-v1:0 "anthropic.claude-3-haiku-20240307-v1:0"
         accept = "application/json"
         contentType = "application/json"
-        
+
         response = self.bedrock_client.invoke_model(
             body=body, modelId=modelId, accept=accept, contentType=contentType
         )
         response_body = json.loads(response.get("body").read())
-        result = response_body['content'][0]['text'].replace('</rewrite>', '').strip()
-        if result.startswith('<instruction>'):
+        result = response_body["content"][0]["text"].replace("</rewrite>", "").strip()
+        if result.startswith("<instruction>"):
             result = result[13:]
-        if result.endswith('</instruction>'):
+        if result.endswith("</instruction>"):
             result = result[:-14]
         result = result.strip()
         return result
 
     def detect_lang(self, initial_prompt):
-        lang_example = json.dumps({'lang': 'ch'})
-        prompt = '''
+        lang_example = json.dumps({"lang": "ch"})
+        prompt = """
 Please determine what language the document below is in? English (en) or Chinese (ch)?
 
 <document>
@@ -148,46 +150,49 @@ Please determine what language the document below is in? English (en) or Chinese
     
 Use JSON format with key `lang` when return result. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
 Output example: {lang_example}
-'''.strip()
+""".strip()
         messages = [
-          {
-            "role": "user",
-            "content": prompt.format(document=initial_prompt, lang_example=lang_example)
-          },{
-            "role": "assistant",
-            "content": "{"
-          }
+            {
+                "role": "user",
+                "content": prompt.format(
+                    document=initial_prompt, lang_example=lang_example
+                ),
+            },
+            {"role": "assistant", "content": "{"},
         ]
-        body = json.dumps({
-            "messages": messages,
-            "max_tokens": 1000,
-            "temperature": 0.8,
-            "top_k": 50,
-            "top_p": 1,
-            "stop_sequences": [
-              "\n\nHuman:"
-            ],
-            "anthropic_version": "bedrock-2023-05-31"
-        })
+        body = json.dumps(
+            {
+                "messages": messages,
+                "max_tokens": 1000,
+                "temperature": 0.8,
+                "top_k": 50,
+                "top_p": 1,
+                "stop_sequences": ["\n\nHuman:"],
+                "anthropic_version": "bedrock-2023-05-31",
+            }
+        )
         modelId = modelId = "anthropic.claude-3-sonnet-20240229-v1:0"
         accept = "application/json"
         contentType = "application/json"
-        
+
         response = self.bedrock_client.invoke_model(
             body=body, modelId=modelId, accept=accept, contentType=contentType
         )
         response_body = json.loads(response.get("body").read())
         try:
-            lang = json.loads('{' + response_body['content'][0]['text'])['lang']
+            lang = json.loads("{" + response_body["content"][0]["text"])["lang"]
         except:
-            lang = ''
+            lang = ""
         return lang
+
     def judge(self, candidates):
         Instruction_prompts = []
         for idx, candidate in enumerate(candidates):
-            Instruction_prompts.append(f'Instruction {idx+1}:\n<instruction>\n{candidate}\n</instruction>')
-        example = json.dumps({'Preferred':'Instruction 1'})
-        prompt = '''
+            Instruction_prompts.append(
+                f"Instruction {idx+1}:\n<instruction>\n{candidate}\n</instruction>"
+            )
+        example = json.dumps({"Preferred": "Instruction 1"})
+        prompt = """
 You are a instruction engineer. Your task is to evaluate which of the three instructions given below is better based on guide in <guide> xml tag.
 
 Instruction guide:
@@ -201,37 +206,42 @@ You are a instruction engineer. Your task is to evaluate which of the three inst
 
 Use JSON format when returning results. Please only output the result in json format, and do the json format check and return, don't include other extra text! An example of output is as follows:
 {example}
-'''.strip()
+""".strip()
         messages = [
-          {
-            "role": "user",
-            "content": prompt.format(guide=PromptGuide, Instruction_prompts='\n\n'.join(Instruction_prompts), example=example)
-          }, {"role": "assistant", "content": "{"}
+            {
+                "role": "user",
+                "content": prompt.format(
+                    guide=PromptGuide,
+                    Instruction_prompts="\n\n".join(Instruction_prompts),
+                    example=example,
+                ),
+            },
+            {"role": "assistant", "content": "{"},
         ]
-        body = json.dumps({
-            "messages": messages,
-            "max_tokens": 128,
-            "temperature": 0.1,
-            "top_k": 50,
-            "top_p": 1,
-            "stop_sequences": [
-              "\n\nHuman:"
-            ],
-            "anthropic_version": "bedrock-2023-05-31"
-        })
+        body = json.dumps(
+            {
+                "messages": messages,
+                "max_tokens": 128,
+                "temperature": 0.1,
+                "top_k": 50,
+                "top_p": 1,
+                "stop_sequences": ["\n\nHuman:"],
+                "anthropic_version": "bedrock-2023-05-31",
+            }
+        )
         modelId = "anthropic.claude-3-haiku-20240307-v1:0"  # anthropic.claude-3-sonnet-20240229-v1:0
         accept = "application/json"
         contentType = "application/json"
-        
+
         response = self.bedrock_client.invoke_model(
             body=body, modelId=modelId, accept=accept, contentType=contentType
         )
         response_body = json.loads(response.get("body").read())
         final_result = None
         try:
-            result = json.loads('{'+response_body['content'][0]['text'])
+            result = json.loads("{" + response_body["content"][0]["text"])
             for idx in range(3):
-                if str(idx+1) in result['Preferred']:
+                if str(idx + 1) in result["Preferred"]:
                     final_result = idx
                     break
         except:
