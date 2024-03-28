@@ -1,9 +1,14 @@
+import os
 import boto3
 from botocore.config import Config
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
+
 with open('PromptGuide.md') as f:
     PromptGuide = f.read()
-region_name='us-west-2'
+region_name=os.getenv('REGION_NAME')
 
 class GuideBased():
     def __init__(self):
